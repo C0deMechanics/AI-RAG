@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    ```
+    <title>3D Embedding Vector Visualization</title>
+
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+
+    <style>
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: white;
+        }
+
+        #renderCanvas {
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 440px;
+            background: rgba(0, 0, 0, 0.78);
+            padding: 18px;
+            border-radius: 10px;
+            z-index: 10;
+            box-sizing: border-box;
+        }
+
+        #info h2 {
+            margin: 0 0 15px 0;
+            font-size: 21px;
+        }
+
+        .vector {
+            margin: 12px 0;
+            padding: 10px;
+            border-left: 4px solid;
+        }
+
+        .v1 {
+            border-color: #ff5555;
+        }
+
+        .v2 {
+            border-color: #55ff55;
+        }
+
+        .v3 {
+            border-color: #5599ff;
+        }
+
+        .text {
+            font-weight: bold;
+            margin-bottom: 6px;
+            line-height: 1.3;
+        }
+
+        .value {
+            font-family: monospace;
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        #similarity {
+            margin-top: 15px;
+            padding-top: 12px;
+            border-top: 1px solid #555;
+            font-family: monospace;
+            font-size: 13px;
+            line-height: 1.7;
+        }
+
+        .note {
+            margin-top: 12px;
+            color: #aaa;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+    </style>
+    ```
+
+</head>
+
+<body>
+
+    <canvas id="renderCanvas"></canvas>
+
+    <div id="info">
+
+        ```
+        <h2>3D Embedding Space</h2>
+
+        <div class="vector v1">
+            <div class="text">
+                What is RAG?
+            </div>
+
+            <div class="value">
+                [-0.38151, 0.34661, 0.00000]
+            </div>
+        </div>
+
+        <div class="vector v2">
+            <div class="text">
+                Isn't avocados delicious?
+            </div>
+
+            <div class="value">
+                [0.71773, 0.01489, 0.00000]
+            </div>
+        </div>
+
+        <div class="vector v3">
+            <div class="text">
+                RAG (Retrieval Augmented Generation) is an AI technique that combines information retrieval from
+                external source with a generative LLM to produce accurate responses.
+            </div>
+
+            <div class="value">
+                [-0.33622, -0.36150, 0.00000]
+            </div>
+        </div>
+
+        <div id="similarity">
+
+            Cosine Similarity
+
+            <br><br>
+
+            V1 ↔ V2 = 0.3408
+
+            <br>
+
+            V1 ↔ V3 = 0.7483
+
+            <br>
+
+            V2 ↔ V3 = 0.3737
+
+        </div>
+
+        <div class="note">
+            Drag to rotate the camera. Scroll to zoom.
+            <br>
+            All three vectors have approximately zero Z,
+            so they lie on the XY plane.
+        </div>
+        ```
+
+    </div>
+
+    <script>
+
+        const canvas = document.getElementById("renderCanvas");
+
+        const engine = new BABYLON.Engine(
+            canvas,
+            true
+        );
+
+
+        // ======================================================
+        // CREATE SCENE
+        // ======================================================
+
+        const createScene = function () {
+
+            const scene = new BABYLON.Scene(engine);
+
+            scene.clearColor =
+                new BABYLON.Color4(
+                    0.04,
+                    0.04,
+                    0.04,
+                    1
+                );
+
+
+            // ==================================================
+            // CAMERA
+            // ==================================================
+
+            const camera =
+                new BABYLON.ArcRotateCamera(
+                    "camera",
+
+                    -Math.PI / 2,
+
+                    Math.PI / 3,
+
+                    3.5,
+
+                    new BABYLON.Vector3(
+                        0,
+                        0,
+                        0
+                    ),
+
+                    scene
+                );
+
+            camera.attachControl(
+                canvas,
+                true
+            );
+
+            camera.lowerRadiusLimit = 1.5;
+
+            camera.upperRadiusLimit = 8;
+
+
+            // ==================================================
+            // LIGHT
+            // ==================================================
+
+            const light =
+                new BABYLON.HemisphericLight(
+                    "light",
+
+                    new BABYLON.Vector3(
+                        0,
+                        1,
+                        0
+                    ),
+
+                    scene
+                );
+
+            light.intensity = 0.8;
+
+
+            // ==================================================
+            // GRID
+            // ==================================================
+
+            const gridSize = 2;
+
+            const gridStep = 0.25;
+
+            for (
+                let i = -gridSize;
+                i <= gridSize;
+                i += gridStep
+            ) {
+
+                // Horizontal grid line
+
+                const line1 =
+                    BABYLON.MeshBuilder.CreateLines(
+                        "grid",
+
+                        {
+                            points: [
+
+                                new BABYLON.Vector3(
+                                    -gridSize,
+                                    0,
+                                    i
+                                ),
+
+                                new BABYLON.Vector3(
+                                    gridSize,
+                                    0,
+                                    i
+                                )
+
+                            ]
+                        },
+
+                        scene
+                    );
+
+                line1.color =
+                    new BABYLON.Color3(
+                        0.3,
+                        0.3,
+                        0.3
+                    );
+
+
+                // Vertical grid line
+
+                const line2 =
+                    BABYLON.MeshBuilder.CreateLines(
+                        "grid",
+
+                        {
+                            points: [
+
+                                new BABYLON.Vector3(
+                                    i,
+                                    0,
+                                    -gridSize
+                                ),
+
+                                new BABYLON.Vector3(
+                                    i,
+                                    0,
+                                    gridSize
+                                )
+
+                            ]
+                        },
+
+                        scene
+                    );
+
+                line2.color =
+                    new BABYLON.Color3(
+                        0.3,
+                        0.3,
+                        0.3
+                    );
+            }
+
+
+            // ==================================================
+            // AXES
+            // ==================================================
+
+            function createAxis(
+                name,
+                end,
+                color
+            ) {
+
+                const line =
+                    BABYLON.MeshBuilder.CreateLines(
+                        name,
+
+                        {
+                            points: [
+
+                                BABYLON.Vector3.Zero(),
+
+                                end
+
+                            ]
+                        },
+
+                        scene
+                    );
+
+                line.color = color;
+
+                return line;
+            }
+
+
+            createAxis(
+                "X Axis",
+
+                new BABYLON.Vector3(
+                    1.5,
+                    0,
+                    0
+                ),
+
+                new BABYLON.Color3(
+                    1,
+                    0,
+                    0
+                )
+            );
+
+
+            createAxis(
+                "Y Axis",
+
+                new BABYLON.Vector3(
+                    0,
+                    1.5,
+                    0
+                ),
+
+                new BABYLON.Color3(
+                    0,
+                    1,
+                    0
+                )
+            );
+
+
+            createAxis(
+                "Z Axis",
+
+                new BABYLON.Vector3(
+                    0,
+                    0,
+                    1.5
+                ),
+
+                new BABYLON.Color3(
+                    0.2,
+                    0.5,
+                    1
+                )
+            );
+
+
+            // ==================================================
+            // AXIS LABELS
+            // ==================================================
+
+            function createAxisLabel(
+                text,
+                position
+            ) {
+
+                const plane =
+                    BABYLON.MeshBuilder.CreatePlane(
+                        "axisLabel",
+                        {
+                            size: 0.18
+                        },
+                        scene
+                    );
+
+                plane.position =
+                    position;
+
+
+                const texture =
+                    new BABYLON.DynamicTexture(
+                        "axisTexture",
+
+                        {
+                            width: 256,
+                            height: 128
+                        },
+
+                        scene
+                    );
+
+                texture.hasAlpha = true;
+
+
+                texture.drawText(
+                    text,
+
+                    null,
+
+                    90,
+
+                    "bold 60px Arial",
+
+                    "white",
+
+                    "transparent",
+
+                    true
+                );
+
+
+                const material =
+                    new BABYLON.StandardMaterial(
+                        "axisLabelMaterial",
+                        scene
+                    );
+
+                material.diffuseTexture =
+                    texture;
+
+                material.emissiveColor =
+                    new BABYLON.Color3(
+                        1,
+                        1,
+                        1
+                    );
+
+                material.backFaceCulling =
+                    false;
+
+
+                plane.material =
+                    material;
+
+
+                scene.registerBeforeRender(
+                    () => {
+
+                        plane.rotationQuaternion =
+                            camera.absoluteRotation.clone();
+
+                    }
+                );
+
+
+                return plane;
+            }
+
+
+            createAxisLabel(
+                "X",
+                new BABYLON.Vector3(
+                    1.65,
+                    0,
+                    0
+                )
+            );
+
+
+            createAxisLabel(
+                "Y",
+                new BABYLON.Vector3(
+                    0,
+                    1.65,
+                    0
+                )
+            );
+
+
+            createAxisLabel(
+                "Z",
+                new BABYLON.Vector3(
+                    0,
+                    0,
+                    1.65
+                )
+            );
+
+
+            // ==================================================
+            // VECTOR CREATION
+            // ==================================================
+
+            function createVector(
+                name,
+                labelText,
+                vector,
+                color
+            ) {
+
+                const origin =
+                    BABYLON.Vector3.Zero();
+
+
+                const end =
+                    new BABYLON.Vector3(
+                        vector[0],
+                        vector[1],
+                        vector[2]
+                    );
+
+
+                // ==============================================
+                // VECTOR LINE
+                // ==============================================
+
+                const line =
+                    BABYLON.MeshBuilder.CreateLines(
+                        name + "_line",
+
+                        {
+                            points: [
+                                origin,
+                                end
+                            ]
+                        },
+
+                        scene
+                    );
+
+                line.color = color;
+
+
+                // ==============================================
+                // ARROW
+                // ==============================================
+
+                const direction =
+                    end
+                        .subtract(origin)
+                        .normalize();
+
+
+                const arrow =
+                    BABYLON.MeshBuilder.CreateCylinder(
+                        name + "_arrow",
+
+                        {
+                            height: 0.12,
+
+                            diameterTop: 0,
+
+                            diameterBottom: 0.06,
+
+                            tessellation: 16
+                        },
+
+                        scene
+                    );
+
+
+                arrow.position =
+                    end;
+
+
+                arrow.rotationQuaternion =
+                    BABYLON.Quaternion.FromUnitVectorsToRef(
+
+                        BABYLON.Axis.Y,
+
+                        direction,
+
+                        new BABYLON.Quaternion()
+
+                    );
+
+
+                const material =
+                    new BABYLON.StandardMaterial(
+                        name + "_material",
+                        scene
+                    );
+
+
+                material.diffuseColor =
+                    color;
+
+                material.emissiveColor =
+                    color;
+
+
+                arrow.material =
+                    material;
+
+
+                // ==============================================
+                // ENDPOINT
+                // ==============================================
+
+                const sphere =
+                    BABYLON.MeshBuilder.CreateSphere(
+                        name + "_point",
+
+                        {
+                            diameter: 0.07
+                        },
+
+                        scene
+                    );
+
+
+                sphere.position =
+                    end;
+
+                sphere.material =
+                    material;
+
+
+                // ==============================================
+                // TEXT LABEL
+                // ==============================================
+
+                const labelWidth = 1.4;
+
+                const labelHeight = 0.55;
+
+
+                const label =
+                    BABYLON.MeshBuilder.CreatePlane(
+                        name + "_label",
+
+                        {
+                            width: labelWidth,
+
+                            height: labelHeight
+                        },
+
+                        scene
+                    );
+
+
+                label.position =
+                    end.add(
+                        new BABYLON.Vector3(
+                            0.15,
+                            0.15,
+                            0
+                        )
+                    );
+
+
+                const texture =
+                    new BABYLON.DynamicTexture(
+
+                        name + "_texture",
+
+                        {
+                            width: 1200,
+
+                            height: 450
+                        },
+
+                        scene
+
+                    );
+
+
+                texture.hasAlpha = true;
+
+
+                // ==============================================
+                // MULTI-LINE TEXT
+                // ==============================================
+
+                const words =
+                    labelText.split(" ");
+
+
+                const lines = [];
+
+                let currentLine = "";
+
+                const maxCharacters = 32;
+
+
+                words.forEach(word => {
+
+                    if (
+                        (currentLine + " " + word)
+                            .trim()
+                            .length > maxCharacters
+                    ) {
+
+                        lines.push(
+                            currentLine.trim()
+                        );
+
+                        currentLine = word;
+
+                    } else {
+
+                        currentLine +=
+                            " " + word;
+
+                    }
+
+                });
+
+
+                if (currentLine.trim()) {
+
+                    lines.push(
+                        currentLine.trim()
+                    );
+
+                }
+
+
+                const lineHeight = 80;
+
+
+                lines.forEach(
+                    (lineText, index) => {
+
+                        texture.drawText(
+
+                            lineText,
+
+                            30,
+
+                            80 +
+                            index * lineHeight,
+
+                            "bold 48px Arial",
+
+                            "white",
+
+                            null,
+
+                            true
+
+                        );
+
+                    }
+                );
+
+
+                // ==============================================
+                // LABEL MATERIAL
+                // ==============================================
+
+                const labelMaterial =
+                    new BABYLON.StandardMaterial(
+                        name + "_labelMaterial",
+                        scene
+                    );
+
+
+                labelMaterial.diffuseTexture =
+                    texture;
+
+
+                labelMaterial.emissiveColor =
+                    new BABYLON.Color3(
+                        1,
+                        1,
+                        1
+                    );
+
+
+                labelMaterial.backFaceCulling =
+                    false;
+
+
+                label.material =
+                    labelMaterial;
+
+
+                // ==============================================
+                // ALWAYS FACE CAMERA
+                // ==============================================
+
+                scene.registerBeforeRender(
+                    () => {
+
+                        label.rotationQuaternion =
+                            camera.absoluteRotation.clone();
+
+                    }
+                );
+
+
+                return end;
+            }
+
+
+            // ==================================================
+            // YOUR EMBEDDING VECTORS
+            // ==================================================
+
+            createVector(
+
+                "V1",
+
+                "What is RAG?",
+
+                [
+                    -0.381509988,
+                    0.346610374,
+                    0
+                ],
+
+                new BABYLON.Color3(
+                    1,
+                    0.2,
+                    0.2
+                )
+
+            );
+
+
+            createVector(
+
+                "V2",
+
+                "Isn't avocados delicious?",
+
+                [
+                    0.717734056,
+                    0.014892973,
+                    0
+                ],
+
+                new BABYLON.Color3(
+                    0.2,
+                    1,
+                    0.2
+                )
+
+            );
+
+
+            createVector(
+
+                "V3",
+
+                "RAG (Retrieval Augmented Generation) is an AI technique that combines information retrieval from external source with a generative LLM to produce accurate responses.",
+
+                [
+                    -0.336224069,
+                    -0.361503346,
+                    0
+                ],
+
+                new BABYLON.Color3(
+                    0.2,
+                    0.5,
+                    1
+                )
+
+            );
+
+
+            // ==================================================
+            // ORIGIN
+            // ==================================================
+
+            const origin =
+                BABYLON.MeshBuilder.CreateSphere(
+
+                    "origin",
+
+                    {
+                        diameter: 0.1
+                    },
+
+                    scene
+
+                );
+
+
+            origin.position =
+                BABYLON.Vector3.Zero();
+
+
+            // ==================================================
+            // CAMERA TARGET
+            // ==================================================
+
+            camera.setTarget(
+                BABYLON.Vector3.Zero()
+            );
+
+
+            return scene;
+        };
+
+
+        // ======================================================
+        // START
+        // ======================================================
+
+        const scene =
+            createScene();
+
+
+        engine.runRenderLoop(
+            function () {
+
+                scene.render();
+
+            }
+        );
+
+
+        // ======================================================
+        // RESIZE
+        // ======================================================
+
+        window.addEventListener(
+            "resize",
+
+            function () {
+
+                engine.resize();
+
+            }
+        );
+
+    </script>
+
+</body>
+
+</html>
